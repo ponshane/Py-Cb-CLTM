@@ -1,16 +1,22 @@
 import logging
+import time
+import pickle
+import multiprocessing.pool
 import numpy as np
 from scipy.optimize import minimize
 from .utils import normalize_rows
 from numba import jit
+import multiprocessing.pool
 
 class CLTM(object):
-    def __init__(self, numTopics, alpha, beta, pathToCorpus, vectorFilePath):
+    def __init__(self, numTopics, alpha, beta, pathToCorpus, vectorFilePath,
+    parallel, num_processes):
         self.word2IdVocabulary = dict()
         self.id2WordVocabulary = dict()
         self.numWordsInCorpus = 0
 
-        ### to be passed in
+        self.parallel = parallel
+        self.num_processes = num_processes
         self.numTopics = numTopics
         self.alpha = alpha
         self.beta = beta
@@ -103,18 +109,31 @@ class CLTM(object):
         logging.info("Start to optimize:")
         for i in range(Iteration):
             after_cost = 0
-            for t_index in range(self.numTopics):
-                oldtopicVec = self.topicVectors[t_index,:]
-                solution = minimize(fun=self.Loss,
-                    x0=self.topicVectors[t_index,:], args=(t_index), method="L-BFGS-B",
-                    jac=self.gradient_func,
-                    options={'gtol': 1e-3, 'disp': False})
-                after_cost += solution["fun"]
-                newtopicVec = solution["x"]
-                self.topicVectors[t_index,:] = newtopicVec #/ np.linalg.norm(newtopicVec, ord=2)
-                expDotProductValues[t_index, :] = np.exp(np.dot(newtopicVec,self.wordVectors.T))
-                sumExpValues[t_index] = np.sum(expDotProductValues[t_index, :])
-            logging.info("After {} Iters, Avg. Cost = {}".format(i, after_cost/self.numTopics))
+            start = time.time()
+            if self.parallel:
+                args = [i for i in range(self.numTopics)]
+                p = multiprocessing.pool.Pool(self.num_processes)
+                results = p.map(self.minimize_parallel,args)
+                for t_index in range(self.numTopics):
+                    newtopicVec = results[t_index][0]
+                    after_cost += results[t_index][1]
+                    self.topicVectors[t_index,:] = newtopicVec
+                    expDotProductValues[t_index, :] = np.exp(np.dot(newtopicVec,self.wordVectors.T))
+                    sumExpValues[t_index] = np.sum(expDotProductValues[t_index, :])
+            else:
+                for t_index in range(self.numTopics):
+                    # oldtopicVec = self.topicVectors[t_index,:]
+                    solution = minimize(fun=self.Loss,
+                        x0=self.topicVectors[t_index,:], args=(t_index), method="L-BFGS-B",
+                        jac=self.gradient_func,
+                        options={'gtol': 1e-3, 'disp': False})
+                    after_cost += solution["fun"]
+                    newtopicVec = solution["x"]
+                    self.topicVectors[t_index,:] = newtopicVec #/ np.linalg.norm(newtopicVec, ord=2)
+                    expDotProductValues[t_index, :] = np.exp(np.dot(newtopicVec,self.wordVectors.T))
+                    sumExpValues[t_index] = np.sum(expDotProductValues[t_index, :])
+            logging.info("After {} Iters, Avg. Cost = {}, Elaspsed Seconds: {}".format(i,
+             after_cost/self.numTopics, time.time() - start))
             for docId in range(self.numDocuments):
                 docSize = len(self.corpus[docId])
                 for j in range(docSize):
@@ -165,5 +184,10 @@ class CLTM(object):
         solution = minimize(fun=self.Loss,
                     x0=self.topicVectors[t_index,:], args=(t_index),
                     method="L-BFGS-B",
+                    jac=self.gradient_func,
                     options={'gtol': 1e-3, 'disp': False})
         return solution.x, solution.fun
+    
+    def dump_pickles(self, file_path="./tmp.pickle"):
+        with open(file_path, "wb") as fh:
+            pickle.dump((self.topicVectors), fh)

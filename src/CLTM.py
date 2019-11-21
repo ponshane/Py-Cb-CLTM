@@ -5,7 +5,6 @@ import multiprocessing.pool
 import numpy as np
 from scipy.optimize import minimize
 from .utils import normalize_rows
-from numba import jit
 import multiprocessing.pool
 
 class CLTM(object):
@@ -155,12 +154,12 @@ class CLTM(object):
                     self.sumTopicWordCountLF[new_topic] += 1    
                     self.docTopicCount[docId, new_topic] += 1
     
-    @staticmethod
-    @jit(nopython=True)
-    def _compiled_loss(topicWordCountLF, wordVectors, vec, idx):
-        return -np.dot(topicWordCountLF[idx,:],\
-            (np.dot(vec, wordVectors.T) -\
-                 np.log(np.sum(np.exp(np.dot(vec, wordVectors.T))))))
+    # @staticmethod
+    # @jit(nopython=True)
+    # def _compiled_loss(topicWordCountLF, wordVectors, vec, idx):
+    #     return -np.dot(topicWordCountLF[idx,:],\
+    #         (np.dot(vec, wordVectors.T) -\
+    #              np.log(np.sum(np.exp(np.dot(vec, wordVectors.T))))))
 
     def Loss(self, vec, idx):
         # return self._compiled_loss(self.topicWordCountLF, self.wordVectors, vec, idx)

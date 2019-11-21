@@ -1,8 +1,5 @@
 from src.CLTM import CLTM
-from scipy.optimize import minimize
-import multiprocessing.pool
 import logging
-import time
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s',
  level=logging.INFO)
@@ -14,4 +11,3 @@ cltm = CLTM(numTopics=10, alpha=0.1,
 
 cltm.sample(2)
 cltm.dump_pickles()
-# print()

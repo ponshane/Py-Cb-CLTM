@@ -8,7 +8,7 @@ from .utils import normalize_rows
 import multiprocessing.pool
 
 class CLTM(object):
-    def __init__(self, numTopics, alpha, beta, pathToCorpus, vectorFilePath,
+    def __init__(self, numTopics, alpha, pathToCorpus, vectorFilePath,
     parallel, num_processes):
         self.word2IdVocabulary = dict()
         self.id2WordVocabulary = dict()
@@ -18,7 +18,7 @@ class CLTM(object):
         self.num_processes = num_processes
         self.numTopics = numTopics
         self.alpha = alpha
-        self.beta = beta
+        # self.beta = beta
         self.read_corpus(pathToCorpus)
         logging.info("Loaded Corpus.")
 
@@ -31,7 +31,7 @@ class CLTM(object):
         self.sumTopicWordCountLF = np.zeros(self.numTopics) 
 
         self.alphaSum = self.numTopics * self.alpha
-        self.betaSum = self.vocabularySize * self.beta
+        # self.betaSum = self.vocabularySize * self.beta
         
         self.readWordVectorsFile(vectorFilePath)
         logging.info("Loaded Wordvectors.")

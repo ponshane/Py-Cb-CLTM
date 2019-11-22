@@ -5,6 +5,7 @@ import multiprocessing.pool
 import numpy as np
 from scipy.optimize import minimize
 from .utils import normalize_rows
+from numba import jit
 import multiprocessing.pool
 
 class CLTM(object):
@@ -154,29 +155,38 @@ class CLTM(object):
                     self.sumTopicWordCountLF[new_topic] += 1    
                     self.docTopicCount[docId, new_topic] += 1
     
-    # @staticmethod
-    # @jit(nopython=True)
-    # def _compiled_loss(topicWordCountLF, wordVectors, vec, idx):
-    #     return -np.dot(topicWordCountLF[idx,:],\
-    #         (np.dot(vec, wordVectors.T) -\
-    #              np.log(np.sum(np.exp(np.dot(vec, wordVectors.T))))))
+    @staticmethod
+    @jit(nopython=True)
+    def _compiled_loss(topicWordCountLF, wordVectors, vec, idx):
+        return -np.dot(topicWordCountLF[idx,:],\
+            (np.dot(vec, wordVectors.T) -\
+                 np.log(np.sum(np.exp(np.dot(vec, wordVectors.T))))))
 
     def Loss(self, vec, idx):
-        # return self._compiled_loss(self.topicWordCountLF, self.wordVectors, vec, idx)
-        return -np.dot(self.topicWordCountLF[idx,:],\
-            (np.dot(vec, self.wordVectors.T) -\
-                 np.log(np.sum(np.exp(np.dot(vec, self.wordVectors.T))))))
+        return self._compiled_loss(self.topicWordCountLF, self.wordVectors, vec, idx)
+        # return -np.dot(self.topicWordCountLF[idx,:],\
+        #     (np.dot(vec, self.wordVectors.T) -\
+        #          np.log(np.sum(np.exp(np.dot(vec, self.wordVectors.T))))))
     
-    def expectation(self, vec):
-        return np.exp(np.dot(vec, self.wordVectors.T)).T / np.sum(np.exp(np.dot(vec, self.wordVectors.T)))
-    
-    def gradient_func(self, vec, idx):
-        weighted_dims = np.sum(self.wordVectors * self.expectation(vec)[:,np.newaxis],
+    @staticmethod
+    @jit(nopython=True)
+    def _compiled_gradient_func(wordVectors, vec, topicWordCountLF, idx):
+        expection = np.exp(np.dot(vec, wordVectors.T)).T / np.sum(np.exp(np.dot(vec, wordVectors.T)))
+        weighted_dims = np.sum(wordVectors * np.expand_dims(expection, axis=1), # expection[:,np.newaxis] = np.expand_dims(expection, axis=1)
          axis=0)
-        grad = np.zeros(self.wordVectors.shape)
-        for word_ind in range(self.wordVectors.shape[0]):
-            grad[word_ind,:] = (self.wordVectors[word_ind,:] - weighted_dims) * self.topicWordCountLF[idx,word_ind]
+        grad = np.zeros(wordVectors.shape)
+        for word_ind in range(wordVectors.shape[0]):
+            grad[word_ind,:] = (wordVectors[word_ind,:] - weighted_dims) * topicWordCountLF[idx,word_ind]
         return np.sum(grad, axis=0)
+
+    def gradient_func(self, vec, idx):
+        return self._compiled_gradient_func(self.wordVectors, vec, self.topicWordCountLF, idx)
+        # weighted_dims = np.sum(self.wordVectors * self.expectation(vec)[:,np.newaxis],
+        #  axis=0)
+        # grad = np.zeros(self.wordVectors.shape)
+        # for word_ind in range(self.wordVectors.shape[0]):
+        #     grad[word_ind,:] = (self.wordVectors[word_ind,:] - weighted_dims) * self.topicWordCountLF[idx,word_ind]
+        # return np.sum(grad, axis=0)
 
     def minimize_parallel(self, args):
         t_index = args

@@ -197,6 +197,30 @@ class CLTM(object):
                     options={'gtol': 1e-3, 'disp': False})
         return solution.x, solution.fun
     
-    def dump_pickles(self, file_path="./tmp.pickle"):
+    def export_topics(self, top_n = 500):
+        """ export topic words
+
+        Args:
+            top_n (int, optional): number of words per topic. Defaults to 500.
+
+        Returns:
+            list: list of topic words, each indicates each topics
+        """
+        list_of_topics = []
+        for t_index in range(self.numTopics):
+            expWordProduct = np.exp(np.dot(self.topicVectors[t_index,:],self.wordVectors.T))
+            topicWordIndexes = (expWordProduct / np.sum(expWordProduct)).argsort()[::-1][:top_n]
+            topicWords = [self.id2WordVocabulary[i] for i in topicWordIndexes]
+            list_of_topics.append(topicWords)
+        return list_of_topics
+
+    def export_docTopics(self):
+        normDocTopics = self.docTopicCount / \
+            np.expand_dims(np.sum(self.docTopicCount, axis=1), axis=1)
+        return normDocTopics
+
+    def dump_pickles(self, file_path="./tmp.pickle", top_n=500):
+        list_of_topics = self.export_topics(top_n = top_n)
+        normDocTopics = self.export_docTopics()
         with open(file_path, "wb") as fh:
-            pickle.dump((self.topicVectors), fh)
+            pickle.dump((self.topicVectors, list_of_topics, normDocTopics), fh)

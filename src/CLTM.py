@@ -6,7 +6,6 @@ import numpy as np
 from scipy.optimize import minimize
 from .utils import normalize_rows
 from numba import jit
-import multiprocessing.pool
 
 class CLTM(object):
     def __init__(self, numTopics, alpha, pathToCorpus, vectorFilePath,

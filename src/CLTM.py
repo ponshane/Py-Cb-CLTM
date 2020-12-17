@@ -171,13 +171,13 @@ class CLTM(object):
     @staticmethod
     @jit(nopython=True)
     def _compiled_gradient_func(wordVectors, vec, topicWordCountLF, idx):
-        expection = np.exp(np.dot(vec, wordVectors.T)).T / np.sum(np.exp(np.dot(vec, wordVectors.T)))
+        expection = np.exp(np.dot(vec, wordVectors.T)).T / np.sum(np.exp(np.dot(vec, wordVectors.T))) # with shape = V x 1
         weighted_dims = np.sum(wordVectors * np.expand_dims(expection, axis=1), # expection[:,np.newaxis] = np.expand_dims(expection, axis=1)
-         axis=0)
+         axis=0) # with shape 1 x d
         grad = np.zeros(wordVectors.shape)
         for word_ind in range(wordVectors.shape[0]):
             grad[word_ind,:] = (wordVectors[word_ind,:] - weighted_dims) * topicWordCountLF[idx,word_ind]
-        return np.sum(grad, axis=0)
+        return np.sum(grad, axis=0) * (-1)
 
     def gradient_func(self, vec, idx):
         return self._compiled_gradient_func(self.wordVectors, vec, self.topicWordCountLF, idx)

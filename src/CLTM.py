@@ -214,6 +214,7 @@ class CLTM(object):
         return list_of_topics
 
     def export_docTopics(self):
+        self.docTopicCount = self.docTopicCount + self.alpha
         normDocTopics = self.docTopicCount / \
             np.expand_dims(np.sum(self.docTopicCount, axis=1), axis=1)
         return normDocTopics

@@ -1,24 +1,19 @@
 import logging
 import time
 import pickle
-import multiprocessing.pool
 import numpy as np
 from scipy.optimize import minimize
 from .utils import normalize_rows
 from numba import jit
 
 class CLTM(object):
-    def __init__(self, numTopics, alpha, pathToCorpus, vectorFilePath,
-    parallel, num_processes):
+    def __init__(self, numTopics, alpha, pathToCorpus, vectorFilePath):
         self.word2IdVocabulary = dict()
         self.id2WordVocabulary = dict()
         self.numWordsInCorpus = 0
 
-        self.parallel = parallel
-        self.num_processes = num_processes
         self.numTopics = numTopics
         self.alpha = alpha
-        # self.beta = beta
         self.read_corpus(pathToCorpus)
         logging.info("Loaded Corpus.")
 
@@ -31,7 +26,6 @@ class CLTM(object):
         self.sumTopicWordCountLF = np.zeros(self.numTopics) 
 
         self.alphaSum = self.numTopics * self.alpha
-        # self.betaSum = self.vocabularySize * self.beta
         
         self.readWordVectorsFile(vectorFilePath)
         logging.info("Loaded Wordvectors.")
@@ -100,7 +94,6 @@ class CLTM(object):
             
             self.topicAssignments.append(topics)
         self.topicVectors = np.random.rand(self.numTopics, self.vectorSize)
-        #self.topicVectors = normalize_rows(self.topicVectors)
     
     def sample(self, Iteration):
         expDotProductValues = np.zeros((self.numTopics, self.vocabularySize))
@@ -109,28 +102,17 @@ class CLTM(object):
         for i in range(Iteration):
             after_cost = 0
             start = time.time()
-            if self.parallel:
-                args = [i for i in range(self.numTopics)]
-                p = multiprocessing.pool.Pool(self.num_processes)
-                results = p.map(self.minimize_parallel,args)
-                for t_index in range(self.numTopics):
-                    newtopicVec = results[t_index][0]
-                    after_cost += results[t_index][1]
-                    self.topicVectors[t_index,:] = newtopicVec
-                    expDotProductValues[t_index, :] = np.exp(np.dot(newtopicVec,self.wordVectors.T))
-                    sumExpValues[t_index] = np.sum(expDotProductValues[t_index, :])
-            else:
-                for t_index in range(self.numTopics):
-                    # oldtopicVec = self.topicVectors[t_index,:]
-                    solution = minimize(fun=self.Loss,
-                        x0=self.topicVectors[t_index,:], args=(t_index), method="L-BFGS-B",
-                        jac=self.gradient_func,
-                        options={'gtol': 1e-3, 'disp': False})
-                    after_cost += solution["fun"]
-                    newtopicVec = solution["x"]
-                    self.topicVectors[t_index,:] = newtopicVec #/ np.linalg.norm(newtopicVec, ord=2)
-                    expDotProductValues[t_index, :] = np.exp(np.dot(newtopicVec,self.wordVectors.T))
-                    sumExpValues[t_index] = np.sum(expDotProductValues[t_index, :])
+            for t_index in range(self.numTopics):
+                oldtopicVec = self.topicVectors[t_index,:]
+                solution = minimize(fun=self.Loss,
+                    x0=self.topicVectors[t_index,:], args=(t_index), method="L-BFGS-B",
+                    jac=self.gradient_func,
+                    options={'gtol': 1e-3, 'disp': False})
+                after_cost += solution["fun"]
+                newtopicVec = solution["x"]
+                self.topicVectors[t_index,:] = newtopicVec
+                expDotProductValues[t_index, :] = np.exp(np.dot(newtopicVec,self.wordVectors.T))
+                sumExpValues[t_index] = np.sum(expDotProductValues[t_index, :])
             logging.info("After {} Iters, Avg. Cost = {}, Elaspsed Seconds: {}".format(i,
              after_cost/self.numTopics, time.time() - start))
             for docId in range(self.numDocuments):
@@ -163,9 +145,6 @@ class CLTM(object):
 
     def Loss(self, vec, idx):
         return self._compiled_loss(self.topicWordCountLF, self.wordVectors, vec, idx)
-        # return -np.dot(self.topicWordCountLF[idx,:],\
-        #     (np.dot(vec, self.wordVectors.T) -\
-        #          np.log(np.sum(np.exp(np.dot(vec, self.wordVectors.T))))))
     
     @staticmethod
     @jit(nopython=True)
@@ -180,21 +159,6 @@ class CLTM(object):
 
     def gradient_func(self, vec, idx):
         return self._compiled_gradient_func(self.wordVectors, vec, self.topicWordCountLF, idx)
-        # weighted_dims = np.sum(self.wordVectors * self.expectation(vec)[:,np.newaxis],
-        #  axis=0)
-        # grad = np.zeros(self.wordVectors.shape)
-        # for word_ind in range(self.wordVectors.shape[0]):
-        #     grad[word_ind,:] = (self.wordVectors[word_ind,:] - weighted_dims) * self.topicWordCountLF[idx,word_ind]
-        # return np.sum(grad, axis=0)
-
-    def minimize_parallel(self, args):
-        t_index = args
-        solution = minimize(fun=self.Loss,
-                    x0=self.topicVectors[t_index,:], args=(t_index),
-                    method="L-BFGS-B",
-                    jac=self.gradient_func,
-                    options={'gtol': 1e-3, 'disp': False})
-        return solution.x, solution.fun
     
     def export_topics(self, top_n = 500):
         """ export topic words
